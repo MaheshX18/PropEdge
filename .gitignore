@@ -1,0 +1,25 @@
+# ========== FRONTEND (Node/React) ==========
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.env
+frontend/.env.local
+frontend/npm-debug.log
+frontend/yarn-error.log
+
+# ========== IDE & EDITOR ==========
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ========== ENVIRONMENT ==========
+.env
+.env.local
+
+# ========== OS ==========
+.DS_Store
+Thumbs.db

@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import java.math.BigDecimal;
 
 @Data
 @NoArgsConstructor
@@ -28,7 +29,7 @@ public class User {
     private String country;
 
     @Column(columnDefinition = "DECIMAL(15,2) DEFAULT 0.00")
-    private Double balance;
+    private BigDecimal balance;
 
     @Column(name = "kyc_verified", nullable = false)
     private Boolean kycVerified = false;

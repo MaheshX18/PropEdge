@@ -8,6 +8,7 @@ import com.mvp18.trading_challenge_backend.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import java.math.BigDecimal;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -32,7 +33,7 @@ public class UserService {
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setFullName(request.getFullName());
         user.setCountry(request.getCountry());
-        user.setBalance(0.0);
+        user.setBalance(BigDecimal.ZERO);
         user.setKycVerified(false);
 
         // Save to database

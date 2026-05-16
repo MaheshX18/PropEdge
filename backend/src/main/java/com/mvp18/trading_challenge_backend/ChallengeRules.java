@@ -41,4 +41,13 @@ public class ChallengeRules {
     protected void onCreate() {
         createdAt = System.currentTimeMillis() / 1000;
     }
+
+    @Column(name = "challenge_type", nullable = false)
+    private String challengeType;
+
+    @Column(name = "phase_number", nullable = false)
+    private Integer phaseNumber;
+
+    @Column(name = "time_limit_days")
+    private Integer timeLimitDays;
 }

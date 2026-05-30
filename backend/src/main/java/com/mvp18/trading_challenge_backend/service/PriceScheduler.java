@@ -12,21 +12,21 @@ public class PriceScheduler {
 
     private final MarketDataService marketDataService;
 
-    // Fetch crypto prices every 5 seconds (Binance FREE)
+    // Crypto every 5 seconds (Binance FREE)
     @Scheduled(fixedDelay = 5000)
     public void fetchCryptoPrices() {
         marketDataService.fetchCryptoPrices();
     }
 
-    // Fetch forex prices every 30 seconds (Frankfurter FREE)
+    // Forex every 30 seconds (Frankfurter FREE)
     @Scheduled(fixedDelay = 30000)
     public void fetchForexPrices() {
         marketDataService.fetchForexPrices();
     }
 
-    // Fetch gold price every 60 seconds (Alpha Vantage FREE tier)
+    // Gold + Silver every 60 seconds (gold-api FREE)
     @Scheduled(fixedDelay = 60000)
-    public void fetchGoldPrice() {
-        marketDataService.fetchGoldPrice();
+    public void fetchMetalPrices() {
+        marketDataService.fetchGoldAndSilver();
     }
 }

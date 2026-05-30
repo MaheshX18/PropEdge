@@ -28,7 +28,6 @@ public class MarketDataService {
 
     private WebClient binanceClient;
     private WebClient frankfurterClient;
-    private WebClient alphaVantageClient;
 
     @PostConstruct
     public void init() {
@@ -41,10 +40,7 @@ public class MarketDataService {
                         HttpClient.create().followRedirect(true)))
                 .build();
 
-        alphaVantageClient = WebClient.builder()
-                .baseUrl(alphaVantageBaseUrl).build();
-
-        // Default prices (shown until real data loads)
+        // Default prices
         priceCache.put("EURUSD", 1.0854);
         priceCache.put("GBPUSD", 1.2734);
         priceCache.put("USDJPY", 154.32);
@@ -58,26 +54,23 @@ public class MarketDataService {
         priceCache.put("BNBUSDT", 412.50);
         priceCache.put("SOLUSDT", 178.90);
 
-        // Fetch gold price immediately on startup
+        // Fetch gold immediately on startup
         fetchGoldPrice();
     }
 
-    // Get single price
     public Double getPrice(String symbol) {
         return priceCache.getOrDefault(symbol, 0.0);
     }
 
-    // Get all prices
     public Map<String, Double> getAllPrices() {
         return new HashMap<>(priceCache);
     }
 
-    // Update price
     public void updatePrice(String symbol, Double price) {
         priceCache.put(symbol, price);
     }
 
-    // Fetch crypto prices from Binance (FREE, no API key needed)
+    // Fetch crypto prices from Binance (FREE)
     public void fetchCryptoPrices() {
         List<String> symbols = List.of(
                 "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT");
@@ -101,7 +94,7 @@ public class MarketDataService {
         }
     }
 
-    // Fetch forex prices from Frankfurter (FREE, no API key needed)
+    // Fetch forex prices from Frankfurter (FREE)
     public void fetchForexPrices() {
         frankfurterClient.get()
                 .uri("/latest?from=USD&to=EUR,GBP,JPY,CHF,AUD,CAD")
@@ -148,35 +141,30 @@ public class MarketDataService {
                         "Frankfurter error: " + error.getMessage()));
     }
 
-    // Fetch Gold price from Alpha Vantage (FREE with API key)
-    // Fetch Gold price from Alpha Vantage (FREE with API key)
+    // Fetch Gold price from metals.live (FREE, no API key needed)
+    // Fetch Gold price from gold-api.com (FREE, no API key needed)
     public void fetchGoldPrice() {
-        System.out.println("Fetching gold price from Alpha Vantage...");
-        alphaVantageClient.get()
-                .uri("/query?function=CURRENCY_EXCHANGE_RATE" +
-                        "&from_currency=XAU&to_currency=USD" +
-                        "&apikey=" + alphaVantageApiKey)
+        System.out.println("Fetching gold price from gold-api.com...");
+        WebClient goldClient = WebClient.builder()
+                .baseUrl("https://api.gold-api.com")
+                .clientConnector(new ReactorClientHttpConnector(
+                        HttpClient.create().followRedirect(true)))
+                .build();
+
+        goldClient.get()
+                .uri("/price/XAU")
                 .retrieve()
-                .bodyToMono(String.class)
+                .bodyToMono(Map.class)
                 .subscribe(response -> {
-                    System.out.println("AlphaVantage raw response: " + response);
-                    try {
-                        if (response.contains("Exchange Rate")) {
-                            // Parse manually
-                            int start = response.indexOf("5. Exchange Rate") + 21;
-                            int end = response.indexOf("\"", start + 1);
-                            String priceStr = response.substring(start, end).trim()
-                                    .replace("\"", "").replace(":", "").trim();
-                            Double price = Double.parseDouble(priceStr);
-                            priceCache.put("XAUUSD", price);
-                            System.out.println("AlphaVantage: XAUUSD → " + price);
-                        } else {
-                            System.out.println("AlphaVantage: No exchange rate in response");
-                        }
-                    } catch (Exception e) {
-                        System.err.println("AlphaVantage parse error: " + e.getMessage());
+                    if (response != null && response.containsKey("price")) {
+                        Double price = Double.parseDouble(
+                                response.get("price").toString());
+                        priceCache.put("XAUUSD", price);
+                        System.out.println("gold-api: XAUUSD → " + price);
+                    } else {
+                        System.out.println("gold-api response: " + response);
                     }
                 }, error -> System.err.println(
-                        "AlphaVantage error: " + error.getMessage()));
+                        "gold-api error: " + error.getMessage()));
     }
 }

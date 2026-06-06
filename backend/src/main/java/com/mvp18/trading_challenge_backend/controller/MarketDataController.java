@@ -22,7 +22,7 @@ public class MarketDataController {
     // GET /api/market/test-gold - manually trigger gold fetch
     @GetMapping("/test-gold")
     public ResponseEntity<String> testGold() {
-        marketDataService.fetchGoldPrice();
+        marketDataService.fetchGoldAndSilver();
         return ResponseEntity.ok("Gold fetch triggered! Check terminal logs.");
     }
 

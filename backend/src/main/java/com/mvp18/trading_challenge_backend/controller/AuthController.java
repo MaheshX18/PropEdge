@@ -1,5 +1,7 @@
 package com.mvp18.trading_challenge_backend.controller;
 
+import com.mvp18.trading_challenge_backend.dto.ApiResponse;
+import com.mvp18.trading_challenge_backend.dto.AuthResponse;
 import com.mvp18.trading_challenge_backend.dto.LoginRequest;
 import com.mvp18.trading_challenge_backend.dto.SignupRequest;
 import com.mvp18.trading_challenge_backend.service.UserService;
@@ -9,31 +11,27 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Map;
-
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*", maxAge = 3600)
 public class AuthController {
 
     private final UserService userService;
 
     @PostMapping("/signup")
-    public ResponseEntity<?> signup(@Valid @RequestBody SignupRequest request) {
-        try {
-            return ResponseEntity.status(HttpStatus.CREATED).body(userService.signup(request));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        }
+    public ResponseEntity<ApiResponse<AuthResponse>> signup(
+            @Valid @RequestBody SignupRequest request) {
+        AuthResponse response = userService.signup(request);
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Signup successful", response));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
-        try {
-            return ResponseEntity.ok(userService.login(request));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        }
+    public ResponseEntity<ApiResponse<AuthResponse>> login(
+            @Valid @RequestBody LoginRequest request) {
+        AuthResponse response = userService.login(request);
+        return ResponseEntity.ok(
+                ApiResponse.success("Login successful", response));
     }
 }

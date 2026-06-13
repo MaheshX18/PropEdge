@@ -4,21 +4,27 @@ import com.mvp18.trading_challenge_backend.ChallengeAttempt;
 import com.mvp18.trading_challenge_backend.Trade;
 import com.mvp18.trading_challenge_backend.TradingAccount;
 import com.mvp18.trading_challenge_backend.User;
+import com.mvp18.trading_challenge_backend.dto.OpenTradeRequest;
+import com.mvp18.trading_challenge_backend.dto.TradeResponse;
+import com.mvp18.trading_challenge_backend.exception.BusinessException;
+import com.mvp18.trading_challenge_backend.exception.ResourceNotFoundException;
+import com.mvp18.trading_challenge_backend.exception.UnauthorizedException;
 import com.mvp18.trading_challenge_backend.repository.ChallengeAttemptRepository;
 import com.mvp18.trading_challenge_backend.repository.TradeRepository;
 import com.mvp18.trading_challenge_backend.repository.TradingAccountRepository;
 import com.mvp18.trading_challenge_backend.repository.UserRepository;
+import com.mvp18.trading_challenge_backend.service.interfaces.ITradeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-public class TradeService {
+public class TradeService implements ITradeService {
 
     private final TradeRepository tradeRepository;
     private final UserRepository userRepository;
@@ -26,33 +32,43 @@ public class TradeService {
     private final ChallengeAttemptRepository challengeAttemptRepository;
     private final MarketDataService marketDataService;
 
-    // Open a new trade
-    public Map<String, Object> openTrade(String email,
-                                         Long challengeAttemptId,
-                                         String symbol,
-                                         String direction,
-                                         BigDecimal lotSize,
-                                         BigDecimal stopLoss,
-                                         BigDecimal takeProfit) {
+    @Override
+    @Transactional
+    public TradeResponse openTrade(String email,
+                                   OpenTradeRequest request) {
 
         // Find user
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "User not found"));
 
         // Find challenge attempt
         ChallengeAttempt attempt = challengeAttemptRepository
-                .findById(challengeAttemptId)
-                .orElseThrow(() -> new RuntimeException("Challenge not found"));
+                .findById(request.getChallengeAttemptId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Challenge attempt",
+                        request.getChallengeAttemptId()));
+
+        // Verify challenge belongs to user
+        if (!attempt.getUser().getId().equals(user.getId())) {
+            throw new UnauthorizedException(
+                    "Challenge does not belong to this user");
+        }
 
         // Check challenge is active
         if (!attempt.getStatus().equals("ACTIVE")) {
-            throw new RuntimeException("Challenge is not active");
+            throw new BusinessException(
+                    "Challenge is not active. Status: "
+                            + attempt.getStatus());
         }
 
         // Get current market price
-        Double currentPrice = marketDataService.getPrice(symbol);
+        Double currentPrice = marketDataService
+                .getPrice(request.getSymbol().toUpperCase());
         if (currentPrice == 0.0) {
-            throw new RuntimeException("Symbol not found: " + symbol);
+            throw new BusinessException(
+                    "Symbol not found or price unavailable: "
+                            + request.getSymbol());
         }
 
         // Create trade
@@ -60,51 +76,44 @@ public class TradeService {
         trade.setUser(user);
         trade.setTradingAccount(attempt.getTradingAccount());
         trade.setChallengeAttempt(attempt);
-        trade.setSymbol(symbol.toUpperCase());
-        trade.setDirection(direction.toUpperCase());
-        trade.setLotSize(lotSize);
+        trade.setSymbol(request.getSymbol().toUpperCase());
+        trade.setDirection(request.getDirection().toUpperCase());
+        trade.setLotSize(request.getLotSize());
         trade.setOpenPrice(BigDecimal.valueOf(currentPrice));
         trade.setStatus("OPEN");
-
-        if (stopLoss != null) trade.setStopLoss(stopLoss);
-        if (takeProfit != null) trade.setTakeProfit(takeProfit);
+        trade.setStopLoss(request.getStopLoss());
+        trade.setTakeProfit(request.getTakeProfit());
 
         tradeRepository.save(trade);
 
-        // Build response
-        Map<String, Object> response = new HashMap<>();
-        response.put("message", "Trade opened successfully");
-        response.put("tradeId", trade.getId());
-        response.put("symbol", symbol.toUpperCase());
-        response.put("direction", direction.toUpperCase());
-        response.put("lotSize", lotSize);
-        response.put("openPrice", currentPrice);
-        response.put("stopLoss", stopLoss);
-        response.put("takeProfit", takeProfit);
-        response.put("status", "OPEN");
-
-        return response;
+        return mapToTradeResponse(trade,
+                attempt.getTradingAccount().getCurrentBalance());
     }
 
-    // Close an existing trade
-    public Map<String, Object> closeTrade(Long tradeId, String email) {
+    @Override
+    @Transactional
+    public TradeResponse closeTrade(Long tradeId, String email) {
 
         // Find trade
         Trade trade = tradeRepository.findById(tradeId)
-                .orElseThrow(() -> new RuntimeException("Trade not found"));
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Trade", tradeId));
 
         // Verify trade belongs to user
         if (!trade.getUser().getEmail().equals(email)) {
-            throw new RuntimeException("Unauthorized");
+            throw new UnauthorizedException(
+                    "Trade does not belong to this user");
         }
 
         // Check trade is open
         if (!trade.getStatus().equals("OPEN")) {
-            throw new RuntimeException("Trade is already closed");
+            throw new BusinessException(
+                    "Trade is already closed");
         }
 
         // Get current market price
-        Double currentPrice = marketDataService.getPrice(trade.getSymbol());
+        Double currentPrice = marketDataService
+                .getPrice(trade.getSymbol());
         BigDecimal closePrice = BigDecimal.valueOf(currentPrice);
 
         // Calculate P&L
@@ -123,37 +132,57 @@ public class TradeService {
         account.setCurrentBalance(newBalance);
         tradingAccountRepository.save(account);
 
-        // Build response
-        Map<String, Object> response = new HashMap<>();
-        response.put("message", "Trade closed successfully");
-        response.put("tradeId", tradeId);
-        response.put("symbol", trade.getSymbol());
-        response.put("direction", trade.getDirection());
-        response.put("openPrice", trade.getOpenPrice());
-        response.put("closePrice", closePrice);
-        response.put("lotSize", trade.getLotSize());
-        response.put("profitLoss", pnl);
-        response.put("newBalance", newBalance);
+        return mapToTradeResponse(trade, newBalance);
+    }
 
+    @Override
+    public List<TradeResponse> getOpenTrades(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "User not found"));
+        return tradeRepository
+                .findByUserIdAndStatus(user.getId(), "OPEN")
+                .stream()
+                .map(t -> mapToTradeResponse(t,
+                        t.getTradingAccount().getCurrentBalance()))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<TradeResponse> getAllTrades(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "User not found"));
+        return tradeRepository.findByUserId(user.getId())
+                .stream()
+                .map(t -> mapToTradeResponse(t,
+                        t.getTradingAccount().getCurrentBalance()))
+                .collect(Collectors.toList());
+    }
+
+    // Map Trade entity to TradeResponse DTO
+    private TradeResponse mapToTradeResponse(Trade trade,
+                                             BigDecimal currentBalance) {
+        TradeResponse response = new TradeResponse();
+        response.setTradeId(trade.getId());
+        response.setSymbol(trade.getSymbol());
+        response.setDirection(trade.getDirection());
+        response.setLotSize(trade.getLotSize());
+        response.setOpenPrice(trade.getOpenPrice());
+        response.setClosePrice(trade.getClosePrice());
+        response.setStopLoss(trade.getStopLoss());
+        response.setTakeProfit(trade.getTakeProfit());
+        response.setProfitLoss(trade.getProfitLoss());
+        response.setCurrentBalance(currentBalance);
+        response.setStatus(trade.getStatus());
+        response.setOpenedAt(trade.getOpenedAt());
+        response.setClosedAt(trade.getClosedAt());
         return response;
     }
 
-    // Get all open trades for a user
-    public List<Trade> getOpenTrades(String email) {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        return tradeRepository.findByUserIdAndStatus(user.getId(), "OPEN");
-    }
-
-    // Get all trades for a user
-    public List<Trade> getAllTrades(String email) {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        return tradeRepository.findByUserId(user.getId());
-    }
-
-    // Calculate P&L
-    private BigDecimal calculatePnL(Trade trade, BigDecimal closePrice) {
+    // Calculate P&L based on instrument type
+    private BigDecimal calculatePnL(Trade trade,
+                                    BigDecimal closePrice) {
         BigDecimal openPrice = trade.getOpenPrice();
         BigDecimal lotSize = trade.getLotSize();
         BigDecimal priceDiff;
@@ -165,32 +194,24 @@ public class TradeService {
             priceDiff = openPrice.subtract(closePrice);
         }
 
-        // Contract size depends on instrument type
         BigDecimal contractSize;
-
         if (symbol.endsWith("USDT") || symbol.endsWith("BTC")
                 || symbol.endsWith("ETH")) {
-            // Crypto - no contract size multiplier
             contractSize = BigDecimal.ONE;
         } else if (symbol.equals("XAUUSD")) {
-            // Gold - 100 oz per lot
             contractSize = BigDecimal.valueOf(100);
         } else if (symbol.equals("XAGUSD")) {
-            // Silver - 5000 oz per lot
             contractSize = BigDecimal.valueOf(5000);
-        } else if (symbol.equals("USOIL") || symbol.equals("UKOIL")) {
-            // Oil - 1000 barrels per lot
+        } else if (symbol.equals("USOIL")
+                || symbol.equals("UKOIL")) {
             contractSize = BigDecimal.valueOf(1000);
         } else {
-            // Forex - standard 100,000 units per lot
             contractSize = BigDecimal.valueOf(100000);
         }
 
-        BigDecimal pnl = priceDiff
+        return priceDiff
                 .multiply(lotSize)
                 .multiply(contractSize)
                 .setScale(2, RoundingMode.HALF_UP);
-
-        return pnl;
     }
 }

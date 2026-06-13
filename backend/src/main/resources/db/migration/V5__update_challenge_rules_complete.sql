@@ -30,7 +30,8 @@ ALTER TABLE challenge_rules ADD COLUMN IF NOT EXISTS max_stacked_trades INTEGER;
 ALTER TABLE challenge_rules ADD COLUMN IF NOT EXISTS daily_profit_cap_usd DECIMAL(10,2);
 ALTER TABLE challenge_rules ADD COLUMN IF NOT EXISTS profit_split_percent DECIMAL(5,2) DEFAULT 80.00;
 
--- Clear existing data and re-insert with complete rules
+-- Clear existing data in correct order (respecting foreign keys)
+DELETE FROM trades;
 DELETE FROM challenge_attempts;
 DELETE FROM trading_accounts;
 DELETE FROM challenge_rules;

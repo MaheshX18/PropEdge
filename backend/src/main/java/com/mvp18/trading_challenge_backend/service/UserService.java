@@ -1,5 +1,7 @@
 package com.mvp18.trading_challenge_backend.service;
 
+import com.mvp18.trading_challenge_backend.service.interfaces.IUserService;
+import com.mvp18.trading_challenge_backend.dto.AuthResponse;
 import com.mvp18.trading_challenge_backend.User;
 import com.mvp18.trading_challenge_backend.dto.LoginRequest;
 import com.mvp18.trading_challenge_backend.dto.SignupRequest;
@@ -15,13 +17,13 @@ import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
-public class UserService {
+public class UserService implements IUserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
 
-    public Map<String, Object> signup(SignupRequest request) {
+    public AuthResponse signup(SignupRequest request) {
         // Check if user already exists
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new RuntimeException("User already exists with this email");
@@ -43,16 +45,16 @@ public class UserService {
         String token = jwtUtil.generateToken(savedUser.getEmail());
 
         // Return response
-        Map<String, Object> response = new HashMap<>();
-        response.put("message", "Signup successful");
-        response.put("token", token);
-        response.put("email", savedUser.getEmail());
-        response.put("userId", savedUser.getId());
-
-        return response;
+        return new AuthResponse(
+                user.getId(),
+                user.getEmail(),
+                user.getFullName(),
+                token,
+                "Bearer"
+        );
     }
 
-    public Map<String, Object> login(LoginRequest request) {
+    public AuthResponse login(LoginRequest request) {
         // Find user by email
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -66,12 +68,12 @@ public class UserService {
         String token = jwtUtil.generateToken(user.getEmail());
 
         // Return response
-        Map<String, Object> response = new HashMap<>();
-        response.put("message", "Login successful");
-        response.put("token", token);
-        response.put("email", user.getEmail());
-        response.put("userId", user.getId());
-
-        return response;
+        return new AuthResponse(
+                user.getId(),
+                user.getEmail(),
+                user.getFullName(),
+                token,
+                "Bearer"
+        );
     }
 }

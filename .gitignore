@@ -7,6 +7,12 @@ frontend/.env.local
 frontend/npm-debug.log
 frontend/yarn-error.log
 
+# ========== BACKEND ==========
+backend/.env
+backend/.env.local
+backend/.env.production
+backend/target/
+
 # ========== IDE & EDITOR ==========
 .idea/
 .vscode/
@@ -19,6 +25,7 @@ Thumbs.db
 # ========== ENVIRONMENT ==========
 .env
 .env.local
+.env.production
 
 # ========== OS ==========
 .DS_Store

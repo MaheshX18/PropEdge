@@ -31,6 +31,7 @@ public class TradeService implements ITradeService {
     private final TradingAccountRepository tradingAccountRepository;
     private final ChallengeAttemptRepository challengeAttemptRepository;
     private final MarketDataService marketDataService;
+    private final RuleEnforcementService ruleEnforcementService;
 
     @Override
     @Transactional
@@ -132,7 +133,19 @@ public class TradeService implements ITradeService {
         account.setCurrentBalance(newBalance);
         tradingAccountRepository.save(account);
 
-        return mapToTradeResponse(trade, newBalance);
+        // Get challenge attempt from trade
+        ChallengeAttempt attempt = trade.getChallengeAttempt();
+
+        // Check rules after trade closes
+        RuleEnforcementService.RuleCheckResult ruleResult =
+                ruleEnforcementService.checkRulesAfterTrade(attempt, trade);
+
+        TradeResponse tradeResponse = mapToTradeResponse(trade, newBalance);
+        tradeResponse.setRuleCheckMessage(ruleResult.getMessage());
+        tradeResponse.setRuleViolationType(ruleResult.getViolationType());
+        tradeResponse.setChallengeStatus(attempt.getStatus());
+
+        return tradeResponse;
     }
 
     @Override

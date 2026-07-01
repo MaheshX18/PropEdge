@@ -22,4 +22,7 @@ public class TradeResponse {
     private String status;
     private Long openedAt;
     private Long closedAt;
+    private String ruleCheckMessage;
+    private String ruleViolationType;
+    private String challengeStatus;
 }

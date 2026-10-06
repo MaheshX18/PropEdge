@@ -64,134 +64,173 @@ FTMO · FundingPips · Funded Room · Funded Firm · FundedNext · Funded Friday
 ---
 
 ## Architecture
-┌─────────────────────────────────────────────────────────────┐
-│ React Frontend │
-│ Login │ Signup │ Dashboard │ AI Coach │
-│ PriceBar │ TradingChart │ TradePanel │ ChallengeStatus │
-└──────────────────────────┬──────────────────────────────────┘
-│ HTTP Requests (Axios + JWT Bearer)
-▼
-┌─────────────────────────────────────────────────────────────┐
-│ Spring Boot Backend (:8080) │
-│ │
-│ ┌─────────────────────────────────────────────────────┐ │
-│ │ JwtAuthenticationFilter │ │
-│ │ Validates Bearer Token → Sets SecurityContext │ │
-│ └─────────────────────────────────────────────────────┘ │
-│ │
-│ ┌──────────────┐ ┌──────────────┐ ┌────────────────┐ │
-│ │AuthController│ │TradeController│ │ChallengeControl│ │
-│ └──────┬───────┘ └──────┬───────┘ └───────┬────────┘ │
-│ │ │ │ │
-│ ┌──────▼───────┐ ┌──────▼───────┐ ┌───────▼────────┐ │
-│ │ UserService │ │ TradeService │ │ChallengeService│ │
-│ └──────────────┘ └──────┬───────┘ └───────┬────────┘ │
-│ │ │ │
-│ ┌────────▼───────────────────▼────────┐ │
-│ │ RuleEnforcementService │ │
-│ │ Daily Loss │ Drawdown │ Profit Tgt │ │
-│ │ Consistency │ Best Day │ Floating │ │
-│ └────────────────────┬────────────────┘ │
-│ │ │
-│ ┌───────────▼──────────┐ │
-│ │ NewsCalendarService │ │
-│ │ (Finnhub API) │ │
-│ └──────────────────────┘ │
-│ │
-│ ┌─────────────────────────────────────────────────────┐ │
-│ │ MarketDataService │ │
-│ │ ConcurrentHashMap (35+ instruments) │ │
-│ └──────────────────────┬──────────────────────────────┘ │
-│ │ │
-│ ┌───────────────────────▼──────────────────────────────┐ │
-│ │ PriceScheduler │ │
-│ │ Binance (5s) │ Frankfurter (30s) │ gold-api (60s) │ │
-│ └───────────────────────────────────────────────────────┘ │
-└──────────────────────────┬──────────────────────────────────┘
-│
-┌───────────────┴───────────────┐
-▼ ▼
-┌─────────────────────┐ ┌────────────────────────────┐
-│ PostgreSQL 18 │ │ External APIs │
-│ │ │ │
-│ users │ │ Binance → crypto │
-│ challenge_rules │ │ Frankfurter → forex │
-│ trading_accounts │ │ gold-api.com → metals │
-│ challenge_attempts │ │ Finnhub → news events │
-│ trades │ │ Anthropic → AI Coach │
-└─────────────────────┘ └────────────────────────────┘
 
-TRADE FLOW
-──────────
-User clicks BUY
-│
-▼
-POST /api/trade/open
-│
-▼
-JWT Filter → extract email from token
-│
-▼
-Fetch live price from MarketDataService cache
-│
-▼
-Save trade to PostgreSQL (status: OPEN)
-│
-▼
-POST /api/trade/close?tradeId=X
-│
-▼
-Calculate P&L (instrument-aware contract size)
-Forex → 100,000 units/lot
-Gold → 100 oz/lot
-Silver → 5,000 oz/lot
-Oil → 1,000 barrels/lot
-Crypto → 1 unit/lot
-│
-▼
-Update TradingAccount balance
-│
-▼
-RuleEnforcementService checks:
-├── Daily Loss Limit exceeded? → FAIL
-├── Max Drawdown breached? → FAIL
-│ (STATIC or TRAILING per firm)
-├── Floating Loss Limit exceeded? → FAIL
-├── News Trading Violation? → FAIL
-├── Consistency Rule broken? → WARN
-├── Best Day Rule broken? → WARN
-└── Profit Target reached?
-+ Min Trading Days met? → PASS
-│
-▼
-Challenge status → ACTIVE / PASSED / FAILED
-│
-▼
-Response: { ruleCheckMessage, violationType, challengeStatus }
+```mermaid
+flowchart TD
+    A[React Frontend\nLogin · Signup · Dashboard · AI Coach\nPriceBar · TradingChart · TradePanel] 
+    -->|HTTP Axios + JWT Bearer| B
 
-SECURITY FLOW
-─────────────
-POST /api/auth/signup or /api/auth/login
-│
-▼
-BCrypt hash password → save to PostgreSQL
-│
-▼
-Generate JWT (HS512, 24h expiry) → return to client
-│
-▼
-Client stores token in localStorage
-│
-▼
-Every protected request:
-Authorization: Bearer <token>
-│
-▼
-JwtAuthenticationFilter validates token
-│
-▼
-Email extracted from token → set in SecurityContext
-│
-▼
-Controller calls SecurityUtils.getCurrentUserEmail()
-(email NEVER taken from URL params or request body)
+    subgraph B[Spring Boot Backend :8080]
+        C[JwtAuthenticationFilter\nValidates token → Sets SecurityContext]
+        D[AuthController]
+        E[TradeController]
+        F[ChallengeController]
+        G[MarketDataController]
+        H[UserService]
+        I[TradeService]
+        J[ChallengeService]
+        K[RuleEnforcementService\nDaily Loss · Drawdown · Profit Target\nConsistency · Best Day · Floating Loss]
+        L[NewsCalendarService\nFinnhub API]
+        M[MarketDataService\nConcurrentHashMap - 35+ instruments]
+        N[PriceScheduler]
+
+        C --> D & E & F & G
+        D --> H
+        E --> I
+        F --> J
+        I --> K
+        K --> L
+        G --> M
+        N -->|every 5s| M
+    end
+
+    B --> DB[(PostgreSQL 18\nusers\nchallenge_rules\ntrading_accounts\nchallenge_attempts\ntrades)]
+
+    N -->|crypto 5s| EX1[Binance REST]
+    N -->|forex 30s| EX2[Frankfurter]
+    N -->|metals 60s| EX3[gold-api.com]
+    L -->|news events| EX4[Finnhub.io]
+    A -->|AI Coach| EX5[Anthropic Claude API]
+```
+
+---
+
+## Trade Flow
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant FE as React Frontend
+    participant JWT as JwtAuthFilter
+    participant TS as TradeService
+    participant MDS as MarketDataService
+    participant RES as RuleEnforcementService
+    participant DB as PostgreSQL
+
+    U->>FE: Click BUY
+    FE->>JWT: POST /api/trade/open + Bearer token
+    JWT->>JWT: Validate token, extract email
+    JWT->>TS: Forward request
+    TS->>MDS: Get live price for symbol
+    MDS-->>TS: Current market price
+    TS->>DB: Save trade (status OPEN)
+    
+    U->>FE: Click CLOSE
+    FE->>JWT: POST /api/trade/close?tradeId=X
+    JWT->>TS: Forward request
+    TS->>TS: Calculate P&L\n(Forex 100k · Gold 100oz · Crypto 1)
+    TS->>DB: Update balance
+    TS->>RES: checkRulesAfterTrade()
+    RES->>RES: Daily Loss Limit?
+    RES->>RES: Max Drawdown (STATIC or TRAILING)?
+    RES->>RES: Profit Target + Min Days?
+    RES->>RES: Consistency + Best Day Rule?
+    RES->>DB: Update challenge PASSED / FAILED
+    RES-->>FE: ruleCheckMessage + challengeStatus
+```
+
+---
+
+## Security Flow
+
+```mermaid
+flowchart LR
+    A[POST /auth/signup\nor /auth/login] 
+    --> B[BCrypt hash password]
+    --> C[Save to PostgreSQL]
+    --> D[Generate JWT\nHS512 · 24h expiry]
+    --> E[Return token to client]
+    --> F[Client stores in localStorage]
+
+    G[Protected Request] 
+    --> H[Authorization: Bearer token]
+    --> I[JwtAuthenticationFilter]
+    --> J{Token valid?}
+    J -->|Yes| K[Extract email\nfrom token]
+    J -->|No| L[403 Forbidden]
+    K --> M[Set in SecurityContext]
+    M --> N[SecurityUtils\n.getCurrentUserEmail()]
+    N --> O[Controller processes request\nEmail NEVER from URL params]
+```
+
+---
+
+## Database Schema
+
+```mermaid
+erDiagram
+    users {
+        bigint id PK
+        varchar email
+        varchar password
+        varchar full_name
+        varchar country
+        decimal balance
+        boolean kyc_verified
+    }
+
+    challenge_rules {
+        bigint id PK
+        varchar firm_name
+        varchar challenge_type
+        int phase_number
+        decimal account_size
+        decimal profit_target_percent
+        decimal daily_loss_limit_percent
+        decimal max_drawdown_percent
+        varchar max_loss_type
+        boolean news_trading_allowed
+        decimal consistency_rule_percent
+    }
+
+    trading_accounts {
+        bigint id PK
+        bigint user_id FK
+        decimal account_size
+        decimal current_balance
+        decimal starting_balance
+        varchar status
+    }
+
+    challenge_attempts {
+        bigint id PK
+        bigint user_id FK
+        bigint trading_account_id FK
+        bigint challenge_rules_id FK
+        varchar status
+        bigint started_at
+        bigint ended_at
+    }
+
+    trades {
+        bigint id PK
+        bigint user_id FK
+        bigint trading_account_id FK
+        bigint challenge_attempt_id FK
+        varchar symbol
+        varchar direction
+        decimal lot_size
+        decimal open_price
+        decimal close_price
+        decimal profit_loss
+        varchar status
+    }
+
+    users ||--o{ trading_accounts : owns
+    users ||--o{ challenge_attempts : attempts
+    users ||--o{ trades : places
+    trading_accounts ||--o{ challenge_attempts : used_in
+    trading_accounts ||--o{ trades : contains
+    challenge_rules ||--o{ challenge_attempts : governs
+    challenge_attempts ||--o{ trades : tracks
+```

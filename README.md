@@ -145,25 +145,23 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    A[POST /auth/signup\nor /auth/login] 
-    --> B[BCrypt hash password]
-    --> C[Save to PostgreSQL]
-    --> D[Generate JWT\nHS512 · 24h expiry]
-    --> E[Return token to client]
-    --> F[Client stores in localStorage]
+    A["POST /auth/signup or /auth/login"] 
+    --> B["BCrypt hash password"]
+    --> C["Save to PostgreSQL"]
+    --> D["Generate JWT - HS512 - 24h expiry"]
+    --> E["Return token to client"]
+    --> F["Client stores in localStorage"]
 
-    G[Protected Request] 
-    --> H[Authorization: Bearer token]
-    --> I[JwtAuthenticationFilter]
-    --> J{Token valid?}
-    J -->|Yes| K[Extract email\nfrom token]
-    J -->|No| L[403 Forbidden]
-    K --> M[Set in SecurityContext]
-    M --> N[SecurityUtils\n.getCurrentUserEmail()]
-    N --> O[Controller processes request\nEmail NEVER from URL params]
+    G["Protected Request"] 
+    --> H["Authorization: Bearer token"]
+    --> I["JwtAuthenticationFilter"]
+    --> J{"Token valid?"}
+    J -->|Yes| K["Extract email from token"]
+    J -->|No| L["403 Forbidden"]
+    K --> M["Set in SecurityContext"]
+    M --> N["SecurityUtils getCurrentUserEmail"]
+    N --> O["Controller processes request - Email NEVER from URL params"]
 ```
-
----
 
 
 ## Database Schema
